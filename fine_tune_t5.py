@@ -54,20 +54,22 @@ def main():
         else:
             train_dataset = text2sql_dataset.T5FinetuneDataset(train_samples, tokenizer)
 
-        optimizer = Adafactor(model.parameters(), lr=training_args.learning_rate,
-                              scale_parameter=False, relative_step=False, clip_threshold=1.0,
-                              warmup_init=False)
-        # train step calculation
+    optimizer = Adafactor(model.parameters(), lr=training_args.learning_rate,
+                          scale_parameter=False, relative_step=False, clip_threshold=1.0,
+                          warmup_init=False)
+    batch_size = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
+    num_update_steps_per_epoch = len(train_dataset) // batch_size
+    num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
+    total_train_steps = math.ceil(training_args.num_train_epochs * num_update_steps_per_epoch)
 
-        batch_size = training_args.per_device_train_batch_size * training_args.gradient_accumulation_steps
-        num_update_steps_per_epoch = len(train_dataset) // batch_size
-        num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
-        total_train_steps = math.ceil(training_args.num_train_epochs * num_update_steps_per_epoch)
-
+    if experiment_args.phase != 'finetune':
         num_warmup_steps = int(0.1 * total_train_steps)
-        lr_scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps,
-                                                       num_training_steps=total_train_steps)
-        print('My total train steps: ', total_train_steps)
+    else:
+        num_warmup_steps = 0
+
+    lr_scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps,
+                                                   num_training_steps=total_train_steps)
+    print('My total train steps: ', total_train_steps)
 
 
     if training_args.do_eval or training_args.do_predict:
@@ -93,7 +95,17 @@ def main():
     )
 
     if training_args.do_train:
-        train_result = trainer.train()
+        checkpoint = None
+        # means that we are training from last checkpoint, including the state of optimizer
+        if experiment_args.phase == 'finetune':
+            last_checkpoint = training_utils.get_last_checkpoint(model_args.model_name_or_path)
+
+            if last_checkpoint is not None:
+                checkpoint = last_checkpoint
+
+                print(f'Starting from from {last_checkpoint}')
+
+        train_result = trainer.train(resume_from_checkpoint=checkpoint)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics

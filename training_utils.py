@@ -1,6 +1,8 @@
 import pandas as pd
 from transformers import EvalPrediction
 from transformers.trainer_utils import EvalLoopOutput
+import os
+import re
 
 
 def generated_query_simple_processor(query):
@@ -57,3 +59,18 @@ def read_t5_tsv_dataset(dataset_path, tokenizer, input_max_length, output_max_le
                         'source': source,
                         'target': target})
     return samples
+
+
+PREFIX_CHECKPOINT_DIR = "checkpoint"
+_re_checkpoint = re.compile(r"^" + PREFIX_CHECKPOINT_DIR + r"\-(\d+)$")
+
+def get_last_checkpoint(folder):
+    content = os.listdir(folder)
+    checkpoints = [
+        path
+        for path in content
+        if _re_checkpoint.search(path) is not None and os.path.isdir(os.path.join(folder, path))
+    ]
+    if len(checkpoints) == 0:
+        return
+    return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))

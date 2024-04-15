@@ -14,7 +14,7 @@ pretrain_ratio=$(echo "0.25" | bc)
 # tsl_ssp - 520 / 32
 # pauq_xsp - 206
 
-CUDA_DEVICE_NUMBER='1'
+CUDA_DEVICE_NUMBER='0'
 seed='1'
 
 train_batch_size=16
@@ -43,20 +43,21 @@ then
 
   pt_epochs=$(echo "$epoch * $pretrain_ratio" | bc)
   #after pretraining we skip the pt epochs and
-  ft_epochs=$(echo "$epoch * ( 1 - $pretrain_ratio)" | bc)
+  ft_epochs_no_skip=$(echo "$epoch * ( 1 - $pretrain_ratio)" | bc)
+  ft_epochs_with_skip=$(echo "$pt_epochs + $epoch * ( 1 - $pretrain_ratio)" | bc)
 
   pt_epochs=${pt_epochs%.*}
-  ft_epochs=${ft_epochs%.*}
-
+  ft_epochs_no_skip=${ft_epochs_no_skip%.*}
+  ft_epochs_with_skip=${ft_epochs_with_skip%.*}
 
   pt_log_steps=$(echo "$pt_epochs * $log_ratio" | bc)
   pt_log_steps=${pt_log_steps%.*}
   pt_eval_steps=$(echo "$pt_epochs * $eval_ratio" | bc)
   pt_eval_steps=${pt_eval_steps%.*}
 
-  ft_log_steps=$(echo "$ft_epochs * $log_ratio" | bc)
+  ft_log_steps=$(echo "$ft_epochs_no_skip * $log_ratio" | bc)
   ft_log_steps=${ft_log_steps%.*}
-  ft_eval_steps=$(echo "$ft_epochs * $eval_ratio" | bc)
+  ft_eval_steps=$(echo "$ft_epochs_no_skip * $eval_ratio" | bc)
   ft_eval_steps=${ft_eval_steps%.*}
 
   pt_lr='1e-3'
@@ -84,41 +85,41 @@ tmux new-session -d -s $run_name
 if [ "$cp_mode" = "yes" ];
 then
   # first run pretraining phase
-  tmux send-keys -t $run_name "set -e" ENTER
+#  tmux send-keys -t $run_name "set -e" ENTER
 
   tmux send-keys -t $run_name "echo 'Pretraining epochs: $pt_epochs'" ENTER
-  tmux send-keys -t $run_name "echo 'Finetuning epochs: $ft_epochs'" ENTER
+  tmux send-keys -t $run_name "echo 'Finetuning epochs: $ft_epochs_no_skip $ft_epochs_with_skip'" ENTER
 
-  tmux send-keys -t $run_name "echo 'Run first pretraining stage...'" ENTER
-  tmux send-keys -t $run_name "CUDA_VISIBLE_DEVICES='$CUDA_DEVICE_NUMBER' /home/somov/.conda/envs/irm_env/bin/python -u fine_tune_t5.py \
-                              --model_name_or_path $model_name \
-                              --train_file $pt_train_file \
-                              --validation_file $pt_test_file \
-                              --do_train \
-                              --prediction_loss_only \
-                              --learning_rate $pt_lr \
-                              --max_grad_norm 1.0 \
-                              --seed $seed \
-                              --per_device_train_batch_size $train_batch_size \
-                              --per_device_eval_batch_size $eval_batch_size \
-                              --gradient_accumulation_steps $gradient_accumulation_steps \
-                              --num_train_epochs $pt_epochs \
-                              --max_seq_length 512  \
-                              --max_output_length 256 \
-                              --generation_max_length 256 \
-                              --save_strategy 'steps' \
-                              --evaluation_strategy 'steps' \
-                              --eval_delay $pt_eval_steps \
-                              --eval_steps $pt_eval_steps \
-                              --save_steps $pt_eval_steps \
-                              --eval_accumulation_steps $gradient_accumulation_steps \
-                              --logging_steps $pt_log_steps \
-                              --report_to 'tensorboard' \
-                              --save_total_limit 1 \
-                              --overwrite_output_dir \
-                              --output_dir '$output_dir/pretrain' \
-                              --logging_dir '$logs_dir/pretrain' \
-                              --phase 'pretrain'" ENTER
+#  tmux send-keys -t $run_name "echo 'Run first pretraining stage...'" ENTER
+#  tmux send-keys -t $run_name "CUDA_VISIBLE_DEVICES='$CUDA_DEVICE_NUMBER' /home/somov/.conda/envs/irm_env/bin/python -u fine_tune_t5.py \
+#                              --model_name_or_path $model_name \
+#                              --train_file $pt_train_file \
+#                              --validation_file $pt_test_file \
+#                              --do_train \
+#                              --prediction_loss_only \
+#                              --learning_rate $pt_lr \
+#                              --max_grad_norm 1.0 \
+#                              --seed $seed \
+#                              --per_device_train_batch_size $train_batch_size \
+#                              --per_device_eval_batch_size $eval_batch_size \
+#                              --gradient_accumulation_steps $gradient_accumulation_steps \
+#                              --num_train_epochs $pt_epochs \
+#                              --max_seq_length 512  \
+#                              --max_output_length 256 \
+#                              --generation_max_length 256 \
+#                              --save_strategy 'steps' \
+#                              --evaluation_strategy 'steps' \
+#                              --eval_delay $pt_eval_steps \
+#                              --eval_steps $pt_eval_steps \
+#                              --save_steps $pt_eval_steps \
+#                              --eval_accumulation_steps $gradient_accumulation_steps \
+#                              --logging_steps $pt_log_steps \
+#                              --report_to 'tensorboard' \
+#                              --save_total_limit 1 \
+#                              --overwrite_output_dir \
+#                              --output_dir '$output_dir/pretrain' \
+#                              --logging_dir '$logs_dir/pretrain' \
+#                              --phase 'pretrain'" ENTER
   tmux send-keys -t $run_name "echo 'Run second finetuning stage'" ENTER
   # then run finetuning phase
   tmux send-keys -t $run_name "CUDA_VISIBLE_DEVICES='$CUDA_DEVICE_NUMBER' /home/somov/.conda/envs/irm_env/bin/python -u fine_tune_t5.py \
@@ -134,7 +135,7 @@ then
                               --per_device_train_batch_size $train_batch_size \
                               --per_device_eval_batch_size $eval_batch_size \
                               --gradient_accumulation_steps $gradient_accumulation_steps \
-                              --num_train_epochs $ft_epochs \
+                              --num_train_epochs $ft_epochs_with_skip \
                               --max_seq_length 512  \
                               --max_output_length 256 \
                               --generation_max_length 256 \
