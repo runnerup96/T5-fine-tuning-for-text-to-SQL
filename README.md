@@ -1,1 +1,1 @@
-# Compositional-Pre-training-for-text-to-SQL
+# Compositional-Pre-training-for-text2SQL
