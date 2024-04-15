@@ -1,0 +1,8 @@
+notebooks
+experiments
+data/prepared_data
+data/raw_splits
+test.sh
+__pycache__
+.idea
+.DS_Store
