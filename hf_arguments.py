@@ -144,3 +144,9 @@ class ExperimentArgs:
             "help": 'Phase of training - "pretrain" or "finetune" or "original"'
         },
     ),
+    pretrain_ratio: float = field(
+        default=0.0,
+        metadata={
+            "help": 'Ratio of training steps for pre-training'
+        },
+    )

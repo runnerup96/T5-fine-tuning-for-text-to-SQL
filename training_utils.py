@@ -1,5 +1,5 @@
 import pandas as pd
-from transformers import EvalPrediction
+from transformers import EvalPrediction, TrainerCallback, TrainingArguments, TrainerState, TrainerControl
 from transformers.trainer_utils import EvalLoopOutput
 import os
 import re
@@ -74,3 +74,15 @@ def get_last_checkpoint(folder):
     if len(checkpoints) == 0:
         return
     return os.path.join(folder, max(checkpoints, key=lambda x: int(_re_checkpoint.search(x).groups()[0])))
+
+
+class TrainingStopCallback(TrainerCallback):
+    "A callback that prints a message at the beginning of training"
+    def __init__(self, steps):
+        self.total_training_steps = steps
+
+    def on_step_end(self, args: TrainingArguments, state: TrainerState, control: TrainerControl, **kwargs):
+        if state.global_step == self.total_training_steps:
+            control.should_training_stop = True
+
+

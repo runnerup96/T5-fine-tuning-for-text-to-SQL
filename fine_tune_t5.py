@@ -38,7 +38,6 @@ def main():
     model = T5ForConditionalGeneration.from_pretrained(model_args.model_name_or_path, config=config)
 
     train_samples, train_dataset = [], []
-    optimizer, lr_scheduler = None, None
     if training_args.do_train:
         train_samples = training_utils.read_t5_tsv_dataset(data_args.train_file,
                                                        tokenizer=tokenizer,
@@ -61,15 +60,24 @@ def main():
     num_update_steps_per_epoch = len(train_dataset) // batch_size
     num_update_steps_per_epoch = max(num_update_steps_per_epoch, 1)
     total_train_steps = math.ceil(training_args.num_train_epochs * num_update_steps_per_epoch)
+    print('My total train steps: ', total_train_steps)
 
-    if experiment_args.phase != 'finetune':
-        num_warmup_steps = int(0.1 * total_train_steps)
-    else:
+    callbacks_list = []
+    num_warmup_steps = 0
+    if experiment_args.phase == 'finetune':
         num_warmup_steps = 0
+    elif experiment_args.phase == 'original':
+        num_warmup_steps = int(0.1 * total_train_steps)
+    elif experiment_args.phase == 'pretrain':
+        num_warmup_steps = int(0.1 * total_train_steps)
+        stopping_step = math.ceil(total_train_steps * experiment_args.pretrain_ratio)
+        print(f'Pretraining will stop at {stopping_step}th step')
+        stopping_callback = training_utils.TrainingStopCallback(steps=stopping_step)
+        callbacks_list.append(stopping_callback)
+
 
     lr_scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps,
                                                    num_training_steps=total_train_steps)
-    print('My total train steps: ', total_train_steps)
 
 
     if training_args.do_eval or training_args.do_predict:
@@ -92,6 +100,7 @@ def main():
         compute_metrics=evaluator.evaluate,
         optimizers=(optimizer, lr_scheduler),
         post_process_function=training_utils.model_post_processing_function,
+        callbacks=callbacks_list
     )
 
     if training_args.do_train:
