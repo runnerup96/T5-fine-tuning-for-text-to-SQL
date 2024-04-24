@@ -4,7 +4,7 @@
 export BASE_DIR="/home/somov/naacl_cp_t5"
 export SPLIT_NAME='shaw_spider_length_ssp'
 epoch=520
-cp_mode="yes"
+cp_mode="no"
 pretrain_ratio=$(echo "0.25" | bc)
 
 # epoch num per split
@@ -168,4 +168,16 @@ else
                               --phase 'original'" ENTER
 fi
 # finetune
+
+tmux send-keys -t $run_name "CUDA_VISIBLE_DEVICES='$CUDA_DEVICE_NUMBER' /home/somov/.conda/envs/irm_env/bin/python -u infer_hf_t5.py \
+                              --model_name_or_path $output_dir \
+                              --test_file $test_file \
+                              --seed $seed \
+                              --max_seq_length 512 \
+                              --max_output_length 256 \
+                              --per_device_eval_batch_size $eval_batch_size\
+                              --generation_max_length 256 \
+                              --num_beams 1 \
+                              --output_dir $output_dir" ENTER
+
 tmux a -t $run_name
