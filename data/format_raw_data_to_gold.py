@@ -3,8 +3,8 @@
 import json
 
 if __name__ == "__main__":
-    source_name = "spider"
-    split_name = "spider_xsp"
+    source_name = "my_cp_splits"
+    split_name = "trl_ssp"
     json_path = f'raw_splits/{source_name}/{split_name}_test.json'
     test_sample = json.load(open(json_path, "r"))
 

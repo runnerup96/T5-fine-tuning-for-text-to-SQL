@@ -4,12 +4,13 @@ import math
 
 import torch
 from transformers import HfArgumentParser, T5ForConditionalGeneration, AutoTokenizer, AutoConfig, Adafactor, \
-    set_seed, Seq2SeqTrainingArguments, get_cosine_schedule_with_warmup
+    set_seed, Seq2SeqTrainingArguments, get_cosine_schedule_with_warmup, EarlyStoppingCallback
 import evaluation
 import hf_arguments
 import text2sql_dataset
 import training_utils
 from sp_seq2seq_trainer import SemanticParsingSeq2SeqTrainer
+
 
 def main():
     logger = logging.getLogger(__name__)
@@ -40,18 +41,32 @@ def main():
     train_samples, train_dataset = [], []
     if training_args.do_train:
         train_samples = training_utils.read_t5_tsv_dataset(data_args.train_file,
-                                                       tokenizer=tokenizer,
-                                                       input_max_length=data_args.max_seq_length,
-                                                       output_max_length=data_args.max_output_length)
+                                                           tokenizer=tokenizer,
+                                                           input_max_length=data_args.max_seq_length,
+                                                           output_max_length=data_args.max_output_length)
 
 
-        if data_args.try_one_batch:
-            one_batch_size = 32
+    if training_args.do_eval or training_args.do_predict:
+        test_samples = training_utils.read_t5_tsv_dataset(data_args.validation_file,
+                                                          tokenizer=tokenizer,
+                                                          input_max_length=data_args.max_seq_length,
+                                                          output_max_length=data_args.max_output_length)
+
+    if data_args.try_one_batch:
+        one_batch_size = training_args.per_device_train_batch_size
+        if train_dataset:
             one_batch_samples = train_samples[-one_batch_size:]
             train_dataset = text2sql_dataset.T5FinetuneDataset(one_batch_samples, tokenizer)
-            test_dataset = text2sql_dataset.T5FinetuneDataset(one_batch_samples, tokenizer)
         else:
+            one_batch_samples = test_samples[-one_batch_size:]
+            train_dataset = text2sql_dataset.T5FinetuneDataset(one_batch_samples, tokenizer)
+
+        test_samples = one_batch_samples
+        test_dataset = train_dataset
+    else:
+        if training_args.do_train:
             train_dataset = text2sql_dataset.T5FinetuneDataset(train_samples, tokenizer)
+        test_dataset = text2sql_dataset.T5FinetuneDataset(test_samples, tokenizer)
 
     optimizer = Adafactor(model.parameters(), lr=training_args.learning_rate,
                           scale_parameter=False, relative_step=False, clip_threshold=1.0,
@@ -68,6 +83,9 @@ def main():
         num_warmup_steps = 0
     elif experiment_args.phase == 'original':
         num_warmup_steps = int(0.1 * total_train_steps)
+        early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=training_args.eval_steps,
+                                                        early_stopping_threshold=0.01)
+        callbacks_list.append(early_stopping_callback)
     elif experiment_args.phase == 'pretrain':
         num_warmup_steps = int(0.1 * total_train_steps)
         stopping_step = math.ceil(total_train_steps * experiment_args.pretrain_ratio)
@@ -75,17 +93,8 @@ def main():
         stopping_callback = training_utils.TrainingStopCallback(steps=stopping_step)
         callbacks_list.append(stopping_callback)
 
-
     lr_scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps,
                                                    num_training_steps=total_train_steps)
-
-
-    if training_args.do_eval or training_args.do_predict:
-        test_samples = training_utils.read_t5_tsv_dataset(data_args.validation_file,
-                                                      tokenizer=tokenizer,
-                                                      input_max_length=data_args.max_seq_length,
-                                                      output_max_length=data_args.max_output_length)
-        test_dataset = text2sql_dataset.T5FinetuneDataset(test_samples, tokenizer)
 
     # prepare evaluation class
     evaluator = evaluation.Evaluator()

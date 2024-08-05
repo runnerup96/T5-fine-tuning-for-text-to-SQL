@@ -2,7 +2,7 @@
 
 #set -e
 export BASE_DIR="/home/somov/naacl_cp_t5"
-export SPLIT_NAME='shaw_spider_length_ssp'
+export SPLIT_NAME='trl_ssp'
 epoch=520
 cp_mode="no"
 pretrain_ratio=$(echo "0.25" | bc)
@@ -14,11 +14,11 @@ pretrain_ratio=$(echo "0.25" | bc)
 # tsl_ssp - 520 / 32
 # pauq_xsp - 206
 
-CUDA_DEVICE_NUMBER='1'
+CUDA_DEVICE_NUMBER='0'
 seed='1'
 
-train_batch_size=16
-gradient_accumulation_steps=16
+train_batch_size=32
+gradient_accumulation_steps=8
 eval_batch_size=16
 
 lr='1e-4'
@@ -28,11 +28,11 @@ model_name="t5-base"
 dir_model_name="t5-base"
 
 log_ratio=$(echo "0.1" | bc)
-eval_ratio=$(echo "0.2" | bc)
+eval_ratio=$(echo "3.0" | bc)
 
 log_steps=$(echo "$epoch * $log_ratio" | bc)
 log_steps=${log_steps%.*}
-
+# need to rewrite this to have ratio of eval iters
 eval_steps=$(echo "$epoch * $eval_ratio" | bc)
 eval_steps=${eval_steps%.*}
 
@@ -61,6 +61,7 @@ logs_dir="$output_dir/logs"
 
 
 tmux new-session -d -s $run_name
+
 # compostionally pretrain
 if [ "$cp_mode" = "yes" ];
 then
@@ -154,6 +155,8 @@ else
                               --generation_max_length 256 \
                               --save_strategy 'steps' \
                               --evaluation_strategy 'steps' \
+                              --metric_for_best_model 'eval_exact_match' \
+                              --load_best_model_at_end \
                               --eval_delay $eval_steps \
                               --eval_steps $eval_steps \
                               --save_steps $eval_steps \
@@ -167,7 +170,13 @@ else
                               --logging_dir $logs_dir \
                               --phase 'original'" ENTER
 fi
-# finetune
+
+
+#output_dir="/home/somov/naacl_cp_t5/experiments/mt0-base_ml_pauq_xsp_s42"
+#test_file="/home/somov/naacl_cp_t5/data/prepared_data/ru_pauq_xsp/ru_pauq_xsp_test.tsv"
+#eval_batch_size=128
+#run_name="eval_on_ru_pauq_ml"
+#tmux new-session -d -s $run_name
 
 tmux send-keys -t $run_name "CUDA_VISIBLE_DEVICES='$CUDA_DEVICE_NUMBER' /home/somov/.conda/envs/irm_env/bin/python -u infer_hf_t5.py \
                               --model_name_or_path $output_dir \
@@ -175,9 +184,11 @@ tmux send-keys -t $run_name "CUDA_VISIBLE_DEVICES='$CUDA_DEVICE_NUMBER' /home/so
                               --seed $seed \
                               --max_seq_length 512 \
                               --max_output_length 256 \
-                              --per_device_eval_batch_size $eval_batch_size\
+                              --per_device_eval_batch_size $eval_batch_size \
+                              --eval_accumulation_steps $gradient_accumulation_steps \
                               --generation_max_length 256 \
                               --num_beams 1 \
                               --output_dir $output_dir" ENTER
 
 tmux a -t $run_name
+

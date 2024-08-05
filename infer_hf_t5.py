@@ -45,7 +45,7 @@ if __name__ == "__main__":
                                                       output_max_length=data_args.max_output_length)
 
     if data_args.try_one_batch:
-        one_batch_size = 32
+        one_batch_size = training_args.eval_batch_size
         one_batch_samples = test_samples[-one_batch_size:]
         test_dataset = text2sql_dataset.T5FinetuneDataset(one_batch_samples, tokenizer)
     else:
