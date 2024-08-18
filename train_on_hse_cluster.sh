@@ -5,14 +5,14 @@
 
 # run config
 #SBATCH --job-name=rand_3b   # Название задачи
-#SBATCH --error=/home/etutubalina/somov-od/naacl_cp_t5/logs/rand_3b.err       # Файл для вывода ошибок
-#SBATCH --output=/home/etutubalina/somov-od/naacl_cp_t5/logs/rand_3b.log       # Файл для вывода результатов
+#SBATCH --error=/home/t5/logs/rand_3b.err       # Файл для вывода ошибок
+#SBATCH --output=/home/t5/logs/rand_3b.log       # Файл для вывода результатов
 #SBATCH --time=36:00:00                      # Максимальное время выполнения
 #SBATCH --cpus-per-task=8                   # Количество CPU на одну задачу
 #SBATCH --gpus=1                            # Требуемое кол-во GPU
 
 set -e
-export BASE_DIR="/home/etutubalina/somov-od/naacl_cp_t5"
+export BASE_DIR="/home/t5"
 export SPLIT_NAME='random_ssp'
 epoch=29
 cp_mode="no"
@@ -31,8 +31,8 @@ train_batch_size='4'
 eval_batch_size='2'
 
 lr='1e-4'
-data_dir="/home/etutubalina/somov-od/naacl_cp_t5/data/prepared_data"
-save_model_dir="/home/etutubalina/somov-od/naacl_cp_t5/experiments"
+data_dir="/home/t5/data/prepared_data"
+save_model_dir="/home/t5/experiments"
 model_name="t5-3b"
 dir_model_name="t5-3b"
 
