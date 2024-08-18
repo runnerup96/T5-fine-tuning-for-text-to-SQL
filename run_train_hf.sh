@@ -1,7 +1,7 @@
 #!/bin/bash
 
 #set -e
-export BASE_DIR="/home/somov/naacl_cp_t5"
+export BASE_DIR="/home/t5"
 export SPLIT_NAME='trl_ssp'
 epoch=520
 cp_mode="no"
@@ -22,7 +22,7 @@ gradient_accumulation_steps=8
 eval_batch_size=16
 
 lr='1e-4'
-data_dir="/home/somov/naacl_cp_t5/data/prepared_data"
+data_dir="/home/t5/data/prepared_data"
 save_model_dir="experiments"
 model_name="t5-base"
 dir_model_name="t5-base"
@@ -172,8 +172,8 @@ else
 fi
 
 
-#output_dir="/home/somov/naacl_cp_t5/experiments/mt0-base_ml_pauq_xsp_s42"
-#test_file="/home/somov/naacl_cp_t5/data/prepared_data/ru_pauq_xsp/ru_pauq_xsp_test.tsv"
+#output_dir="/home/t5/experiments/mt0-base_ml_pauq_xsp_s42"
+#test_file="/home/t5/data/prepared_data/ru_pauq_xsp/ru_pauq_xsp_test.tsv"
 #eval_batch_size=128
 #run_name="eval_on_ru_pauq_ml"
 #tmux new-session -d -s $run_name
