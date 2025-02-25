@@ -1,8 +1,6 @@
 import logging
 import os
 import math
-
-import torch
 from transformers import HfArgumentParser, T5ForConditionalGeneration, AutoTokenizer, AutoConfig, Adafactor, \
     set_seed, Seq2SeqTrainingArguments, get_cosine_schedule_with_warmup, EarlyStoppingCallback
 import evaluation
@@ -78,20 +76,11 @@ def main():
     print('My total train steps: ', total_train_steps)
 
     callbacks_list = []
-    num_warmup_steps = 0
-    if experiment_args.phase == 'finetune':
-        num_warmup_steps = 0
-    elif experiment_args.phase == 'original':
-        num_warmup_steps = int(0.1 * total_train_steps)
-        early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=training_args.eval_steps,
-                                                        early_stopping_threshold=0.01)
-        callbacks_list.append(early_stopping_callback)
-    elif experiment_args.phase == 'pretrain':
-        num_warmup_steps = int(0.1 * total_train_steps)
-        stopping_step = math.ceil(total_train_steps * experiment_args.pretrain_ratio)
-        print(f'Pretraining will stop at {stopping_step}th step')
-        stopping_callback = training_utils.TrainingStopCallback(steps=stopping_step)
-        callbacks_list.append(stopping_callback)
+
+    num_warmup_steps = int(0.1 * total_train_steps)
+    early_stopping_callback = EarlyStoppingCallback(early_stopping_patience=training_args.eval_steps,
+                                                    early_stopping_threshold=0.01)
+    callbacks_list.append(early_stopping_callback)
 
     lr_scheduler = get_cosine_schedule_with_warmup(optimizer, num_warmup_steps=num_warmup_steps,
                                                    num_training_steps=total_train_steps)
@@ -113,17 +102,7 @@ def main():
     )
 
     if training_args.do_train:
-        checkpoint = None
-        # means that we are training from last checkpoint, including the state of optimizer
-        if experiment_args.phase == 'finetune':
-            last_checkpoint = training_utils.get_last_checkpoint(model_args.model_name_or_path)
-
-            if last_checkpoint is not None:
-                checkpoint = last_checkpoint
-
-                print(f'Starting from from {last_checkpoint}')
-
-        train_result = trainer.train(resume_from_checkpoint=checkpoint)
+        train_result = trainer.train(resume_from_checkpoint=None)
         trainer.save_model()  # Saves the tokenizer too for easy upload
 
         metrics = train_result.metrics
@@ -135,7 +114,7 @@ def main():
 
         trainer.save_state()
 
-    if training_args.do_eval and experiment_args.phase != 'pretrain':
+    if training_args.do_eval:
         logger.info("*** Evaluate ***")
 
         metrics = trainer.evaluate(max_length=data_args.max_seq_length,

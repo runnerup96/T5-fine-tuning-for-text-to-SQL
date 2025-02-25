@@ -3,7 +3,7 @@ import os
 import pickle
 from tqdm import tqdm
 import torch
-from transformers import HfArgumentParser, T5ForConditionalGeneration, AutoTokenizer, AutoConfig, Adafactor, \
+from transformers import HfArgumentParser, T5ForConditionalGeneration, AutoTokenizer, AutoConfig, \
     set_seed, Seq2SeqTrainingArguments
 from torch.utils.data import DataLoader
 import hf_arguments

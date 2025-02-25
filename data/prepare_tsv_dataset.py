@@ -2,7 +2,6 @@ import json
 import os.path
 import argparse
 import sys
-import compound_patching
 import random
 import numpy as np
 
@@ -11,20 +10,6 @@ import processing
 from sql_metadata import Parser
 import collections
 
-
-max_compound_dict = {
-        "random_ssp": 52,
-        "paraphrase_ssp": 14,
-        "trl_ssp": 49,
-        "tsl_ssp": 44,
-        "template_ssp": 39,
-        "pauq_xsp": 44,
-        "spider_xsp": 44,
-        "shaw_spider_template_ssp": 39,
-        "shaw_spider_length_ssp": 44,
-        "shaw_spider_tmcd_ssp": 39,
-        "shaw_spider_random_ssp": 52
-}
 
 def _get_schema_string(db_table_json):
     """Returns the schema serialized as a string."""
@@ -59,7 +44,6 @@ def get_query_relevant_schema_string(query_tables, query_columns, db_table_json)
 
 
 def prepare_sl_examples(examples, db2schema_str, dbid2schema_info, schema_linking):
-    # мы ничего не будем выкидывать из инпута - просто будем обучать нашу модель предсказывать все схемы/таблицы для вопроса
 
     prepared_examples = []
     for idx, sample in tqdm(enumerate(examples), total=len(examples)):
@@ -88,56 +72,30 @@ def prepare_sl_examples(examples, db2schema_str, dbid2schema_info, schema_linkin
     return prepared_examples
 
 
-def prepare_cp_examples(examples, dbid2schema_str, split_name, patch_samples=False):
+def prepare_examples(examples, dbid2schema_str, split_name):
     prepared_examples = []
     for idx, sample in tqdm(enumerate(examples), total=len(examples)):
         id_ = sample.get('id', str(idx))
         db_id = sample['db_id']
         schema_str = dbid2schema_str[db_id]
-        # run parsing through processed shit
         question = processing.process_input_question(sample['question'])
 
         query = sample['query']
         processed_query = processing.normalize_sql_query(query)
 
-        if patch_samples:
-            max_patch_length = max_compound_dict[split_name]
-            patch_data = compound_patching.prepare_patch_data(processed_query, max_patch_length)
-            source = f"{db_id}: {question} | {patch_data['shuffled_compound']} {schema_str}"
-            masked_query = patch_data['masked_query']
-            target = f"{db_id} | {masked_query}"
-        else:
-            source = f"{db_id}: {question} {schema_str}"
-            target = f"{db_id} | {processed_query}"
+        source = f"{db_id}: {question} {schema_str}"
+        target = f"{db_id} | {processed_query}"
 
         prepared_examples.append((id_, source, target))
     return prepared_examples
 
-def form_sl_dataset(examples, db_id_to_schema_string, db_id_to_schema_content, split_name,
-                    schema_linking, phase, data_split, save_path):
-    prepared_pt_train_examples = prepare_sl_examples(examples=examples,
-                                                     db2schema_str=db_id_to_schema_string,
-                                                     dbid2schema_info=db_id_to_schema_content,
-                                                     schema_linking=schema_linking)
-    if data_split == 'train' and split_name == 'spider_xsp':
-        del prepared_pt_train_examples[3153]
 
-    if phase in ['pt', 'ft']:
-        filename = f"{phase}_{split_name}_ptr{pretrain_ratio_str}_{data_split}_schema_linking.tsv"
-    else:
-        filename = f"{split_name}_{data_split}.tsv"
-
-    write_tsv(prepared_pt_train_examples, os.path.join(save_path, filename), expected_num_columns=3)
-
-def form_cp_dataset(examples, db_id_to_schema_string, split_name, apply_pathing, phase, data_split, save_path):
-    prepared_pt_train_examples = prepare_cp_examples(examples=examples,
+def form_dataset(examples, db_id_to_schema_string, split_name, data_split, save_path):
+    prepared_pt_train_examples = prepare_examples(examples=examples,
                                                      dbid2schema_str=db_id_to_schema_string,
-                                                     split_name=split_name,
-                                                     patch_samples=apply_pathing)
-    if phase in ['pt', 'ft']:
-        filename = f"{phase}_{split_name}_ptr{pretrain_ratio_str}_{data_split}_comp_gen.tsv"
-    else:
-        filename = f"{split_name}_{data_split}.tsv"
+                                                     split_name=split_name)
+
+    filename = f"{split_name}_{data_split}.tsv"
 
     write_tsv(prepared_pt_train_examples, os.path.join(save_path, filename), expected_num_columns=3)
 
@@ -162,9 +120,6 @@ if __name__ == "__main__":
     parser.add_argument('--splits_directory', default="spider", type=str)
     parser.add_argument('--seed', default=42, type=int, help='')
     parser.add_argument('--split_name', default="spider_xsp", type=str)
-    parser.add_argument('--cp_pretrain', action='store_true')
-    parser.add_argument('--sl_pretrain', action='store_true')
-    parser.add_argument('--pretrain_ratio', default=1.0, type=float)
     args = parser.parse_args(sys.argv[1:])
 
 
@@ -185,11 +140,7 @@ if __name__ == "__main__":
     np.random.seed(seed)
 
     split_name = args.split_name
-    make_cp_pretrain = args.cp_pretrain
-    make_sl_pretrain = args.sl_pretrain
 
-    pretrain_ratio = args.pretrain_ratio
-    pretrain_ratio_str = str(pretrain_ratio).replace('.', '')
     split_dir_path = f"prepared_data/{split_name}"
     if not os.path.exists(split_dir_path):
         os.makedirs(split_dir_path)
@@ -199,69 +150,11 @@ if __name__ == "__main__":
     test_file_path = f"raw_splits/{splits_dir}/{split_name}_test.json"
     test_examples = json.load(open(test_file_path, 'r'))
 
-    if make_cp_pretrain or make_sl_pretrain:
-        # split data in pt_train, ft_train, pt_test, ft_test
-        # random.shuffle(train_examples)
-        pt_samples = int(pretrain_ratio * len(train_examples))
-        if pt_samples == len(train_examples):
-            pt_train_examples, ft_train_examples = train_examples, train_examples
-        else:
-            pt_train_examples, ft_train_examples = train_examples[:pt_samples], train_examples[pt_samples:]
 
-        if make_cp_pretrain:
+    form_dataset(examples=train_examples, db_id_to_schema_string=db_id_to_schema_string,
+                    split_name=split_name, data_split='train',
+                    save_path=split_dir_path)
 
-            form_cp_dataset(examples=pt_train_examples, db_id_to_schema_string=db_id_to_schema_string,
-                            split_name=split_name, apply_pathing=True, phase='pt', data_split='train',
-                            save_path=split_dir_path)
-
-            form_cp_dataset(examples=ft_train_examples, db_id_to_schema_string=db_id_to_schema_string,
-                            split_name=split_name, apply_pathing=False, phase='ft', data_split='train',
-                            save_path=split_dir_path)
-
-            form_cp_dataset(examples=test_examples, db_id_to_schema_string=db_id_to_schema_string,
-                            split_name=split_name, apply_pathing=True, phase='pt', data_split='test',
-                            save_path=split_dir_path)
-
-            form_cp_dataset(examples=test_examples, db_id_to_schema_string=db_id_to_schema_string,
-                            split_name=split_name, apply_pathing=False, phase='ft', data_split='test',
-                            save_path=split_dir_path)
-
-        elif make_sl_pretrain:
-            form_sl_dataset(examples=pt_train_examples, db_id_to_schema_string=db_id_to_schema_string,
-                            db_id_to_schema_content=db_id_to_schema_content, split_name=split_name,
-                            schema_linking=True, phase='pt', data_split='train', save_path=split_dir_path)
-
-            form_sl_dataset(examples=ft_train_examples, db_id_to_schema_string=db_id_to_schema_string,
-                            db_id_to_schema_content=db_id_to_schema_content, split_name=split_name,
-                            schema_linking=False, phase='ft', data_split='train', save_path=split_dir_path)
-
-            form_sl_dataset(examples=test_examples, db_id_to_schema_string=db_id_to_schema_string,
-                            db_id_to_schema_content=db_id_to_schema_content, split_name=split_name,
-                            schema_linking=True, phase='pt', data_split='test', save_path=split_dir_path)
-
-            form_sl_dataset(examples=test_examples, db_id_to_schema_string=db_id_to_schema_string,
-                            db_id_to_schema_content=db_id_to_schema_content, split_name=split_name,
-                            schema_linking=False, phase='ft', data_split='test', save_path=split_dir_path)
-
-    else:
-        # just run classic
-
-        form_cp_dataset(examples=train_examples, db_id_to_schema_string=db_id_to_schema_string,
-                        split_name=split_name, apply_pathing=False, phase='original', data_split='train',
-                        save_path=split_dir_path)
-
-        form_cp_dataset(examples=test_examples, db_id_to_schema_string=db_id_to_schema_string,
-                        split_name=split_name, apply_pathing=False, phase='original', data_split='test',
-                        save_path=split_dir_path)
-
-
-
-
-    # TODO: Для pretraining делаем аналогичный валидационный тест
-    # TODO: На претрейне мы меряем способность модели просто верно переставлять
-    # TODO: На finetune меряем - способность модели генерить верный запрос
-    # TODO: То есть у нас за 1 прогон обучения решается 1 задача
-
-    # TODO: Но мне надо часть данных сплита оставить на finetune
-
-    # Запрос в гугле - how to implement schedualed training?
+    form_dataset(examples=test_examples, db_id_to_schema_string=db_id_to_schema_string,
+                    split_name=split_name, data_split='test',
+                    save_path=split_dir_path)

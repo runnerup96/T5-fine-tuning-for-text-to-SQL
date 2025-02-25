@@ -128,25 +128,3 @@ class DataTrainingArguments:
             if self.test_file is not None:
                 extension = self.test_file.split(".")[-1]
                 assert extension in ["csv", "tsv"], "`test_file` should be a csv or tsv file."
-
-
-@dataclass
-class ExperimentArgs:
-    cp_mode: bool = field(
-        default=False,
-        metadata={
-            "help": 'Compgen training'
-        },
-    ),
-    phase: str = field(
-        default="pretrain",
-        metadata={
-            "help": 'Phase of training - "pretrain" or "finetune" or "original"'
-        },
-    ),
-    pretrain_ratio: float = field(
-        default=0.0,
-        metadata={
-            "help": 'Ratio of training steps for pre-training'
-        },
-    )

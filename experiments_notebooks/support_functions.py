@@ -8,11 +8,11 @@ from tqdm import tqdm
 import numpy as np
 
 # path to https://github.com/taoyds/test-suite-sql-eval
-sys.path.append("/sql_testing_suite")
+sys.path.append("/Users/somov-od/Documents/phd/projects/sql_testing_suite")
 
 import evaluation
 
-sys.path.append("/T5-fine-tuning-for-text-to-SQL")
+sys.path.append("/Users/somov-od/Documents/phd/projects/naacl_cp_t5")
 
 from data import processing
 from data import compound_patching
@@ -80,13 +80,17 @@ def read_gold_dataset_test(split_name, split_gold_path_dict):
     if split_name != 'ehrsql':
         for sample in split:
             new_sample = {"id":sample['id'], 
+                          'question': sample['question'],
                       "sql":sample['query'], 
                       "db_id": sample['db_id']}
             split_list.append(new_sample)
     else:
+        questions_list = json.load(open("/Users/somov-od/Documents/phd/projects/ehrsql-text2sql-solution_statics/data/mimic_iv/test/data.json", 'r'))['data']
+        questions_dict = {sample['id']: sample['question'] for sample in questions_list}
         for key in split:
             new_sample = {"id": key, 
                       "sql": split[key], 
+                          "question": questions_dict[key],
                       "db_id": 'mimic_iv'}
             split_list.append(new_sample)
         
